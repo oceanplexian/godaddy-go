@@ -80,20 +80,19 @@ func main() {
 		//log.Println(record.Name, "=>", record.Data)
 	}
 
-	var hosts []godaddy.DnsRecordCreateTypeName
-	changeData := godaddy.DnsRecordCreateTypeName{Data: *userIPAddress, Ttl: 600}
-	changeDataArray := append(hosts, changeData)
-	result, _ := apiClient.V1Api.RecordReplaceTypeName(ctx, "lwts.org", "A", "@", changeDataArray, nil)
-	if result.StatusCode == 200 {
-		log.Println("Changed", recordData["type"], recordData["name"], "to", *userIPAddress)
+	if *applyBool {
+		var hosts []godaddy.DnsRecordCreateTypeName
+		changeData := godaddy.DnsRecordCreateTypeName{Data: *userIPAddress, Ttl: 600}
+		changeDataArray := append(hosts, changeData)
+		result, _ := apiClient.V1Api.RecordReplaceTypeName(ctx, "lwts.org", "A", "@", changeDataArray, nil)
+		if result.StatusCode == 200 {
+			log.Println("Changed", recordData["type"], recordData["name"], "to", *userIPAddress)
+		} else {
+			log.Println("Failed changing", recordData["type"], recordData["name"], "to", *userIPAddress)
+		}
 	} else {
-		log.Println("Failed changing", recordData["type"], recordData["name"], "to", *userIPAddress)
+		log.Println("The --apply bool is required to apply the changes")
 	}
-	// change the dns record
-	//domainInfo, _, err := apiClient.V1Api.Get(ctx, "lwts.org", nil)
-	//log.Println(domainInfo)
-
-	fmt.Print()
 }
 
 func isIPV4(host string) bool {

@@ -6,8 +6,8 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"net"
 	"os"
-	"strconv"
 	"strings"
 
 	godaddy "github.com/kryptoslogic/godaddy-domainclient"
@@ -26,7 +26,7 @@ func main() {
 	key := os.Getenv("GODADDY_KEY")
 	secret := os.Getenv("GODADDY_SECRET")
 
-	if !isIPV4(*userIPAddress) {
+	if net.ParseIP(*userIPAddress) == nil {
 		fmt.Println("* The IP address provided to --ip-address is invalid")
 		os.Exit(1)
 	}
@@ -51,22 +51,21 @@ func main() {
 	// Check that the domain specified by the user exists in GoDaddy
 	domainExists := 0
 	for _, zone := range zones {
-		if zone.Status == "ACTIVE" {
-			if *userDomainName == zone.Domain {
-				domainExists = 1
-				log.Println("Domain", zone.Domain, "matches user domain", *userDomainName)
-			}
+		if strings.EqualFold(zone.Status, "active") && strings.EqualFold(zone.Domain, *userDomainName) {
+			domainExists = 1
+			log.Println("Domain", zone.Domain, "matches user domain", *userDomainName)
 		}
 	}
 
 	if domainExists != 1 {
 		log.Println("Domain", *userDomainName, "does not match any domains returned from the API")
+		os.Exit(1)
 	}
 
 	var recordData map[string]string
 	recordData = make(map[string]string)
 
-	records, _, err := apiClient.V1Api.RecordGet(ctx, "lwts.org", "", "", nil)
+	records, _, err := apiClient.V1Api.RecordGet(ctx, *userDomainName, "", "", nil)
 	for _, record := range records {
 		if record.Name == "@" {
 			if record.Type_ == "A" {
@@ -81,35 +80,24 @@ func main() {
 	}
 
 	if *applyBool {
-		var hosts []godaddy.DnsRecordCreateTypeName
-		changeData := godaddy.DnsRecordCreateTypeName{Data: *userIPAddress, Ttl: 600}
-		changeDataArray := append(hosts, changeData)
-		result, _ := apiClient.V1Api.RecordReplaceTypeName(ctx, "lwts.org", "A", "@", changeDataArray, nil)
+		changeDataArray := []godaddy.DnsRecordCreateTypeName{{
+			Data: *userIPAddress,
+			Ttl:  600,
+		}}
+
+		result, _ := apiClient.V1Api.RecordReplaceTypeName(ctx, *userDomainName, "A", "@", changeDataArray, nil)
+
 		if result.StatusCode == 200 {
 			log.Println("Changed", recordData["type"], recordData["name"], "to", *userIPAddress)
-		} else {
-			log.Println("Failed changing", recordData["type"], recordData["name"], "to", *userIPAddress)
+			os.Exit(0)
 		}
+		if result.StatusCode != 200 {
+			log.Println("Failed changing", recordData["type"], recordData["name"], "to", *userIPAddress)
+			os.Exit(1)
+		}
+
 	} else {
 		log.Println("The --apply bool is required to apply the changes")
+		os.Exit(1)
 	}
-}
-
-func isIPV4(host string) bool {
-	parts := strings.Split(host, ".")
-	if len(parts) < 4 {
-		return false
-	}
-
-	for _, x := range parts {
-		if i, err := strconv.Atoi(x); err == nil {
-			if i < 0 || i > 255 {
-				return false
-			}
-		} else {
-			return false
-		}
-
-	}
-	return true
 }
